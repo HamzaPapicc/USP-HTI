@@ -3,7 +3,6 @@ from django.contrib.auth.models import User
 
 # Create your models here.
 
-
 def generate_uuid():
     import uuid
     return uuid.uuid4()
