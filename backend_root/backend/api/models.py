@@ -44,3 +44,129 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return self.display_name or self.user.username
+
+        def val_pic_size(image):
+    max_size = 5 * 1024 * 1024
+    if image.size > max_size:
+        raise ValidationError("Picture must be smaller than 5MB.")
+
+def val_sal(salary):
+    if salary < 0:
+        raise ValidationError("Salary must be non negative.")
+
+
+def normalize_uploaded_image(image_field, size, force=False):
+    if not image_field:
+        return False
+
+    # Only normalize freshly uploaded files to avoid repeated recompression.
+    if getattr(image_field, "_committed", True) and not force:
+        return False
+
+    if getattr(image_field, "_committed", True) and force:
+        image_field.open("rb")
+
+    image_field.file.seek(0)
+    image = Image.open(image_field.file)
+    original_format = (image.format or "JPEG").upper()
+    image = ImageOps.exif_transpose(image)
+    image = ImageOps.fit(image, size, Image.Resampling.LANCZOS)
+
+    if original_format not in {"JPEG", "JPG", "PNG", "WEBP"}:
+        original_format = "JPEG"
+
+    save_format = "JPEG" if original_format in {"JPEG", "JPG"} else original_format
+    extension = "jpg" if save_format == "JPEG" else save_format.lower()
+
+    if save_format == "JPEG":
+        if image.mode in ("RGBA", "LA", "P"):
+            image = image.convert("RGBA")
+            background = Image.new("RGB", image.size, (255, 255, 255))
+            alpha = image.split()[-1]
+            background.paste(image, mask=alpha)
+            image = background
+        elif image.mode != "RGB":
+            image = image.convert("RGB")
+
+    output = BytesIO()
+    if save_format == "JPEG":
+        image.save(output, format=save_format, quality=88, optimize=True)
+    elif save_format == "WEBP":
+        image.save(output, format=save_format, quality=88, method=6)
+    else:
+        image.save(output, format=save_format, optimize=True)
+    output.seek(0)
+
+    base_name, _ = os.path.splitext(image_field.name)
+    image_field.save(
+        f"{base_name}.{extension}",
+        ContentFile(output.read()),
+        save=False
+    )
+    image_field.close()
+    return True
+
+class Advertisement(models.Model):
+    POSITION_TYPE = [
+        ('waiter', 'Waiter'),
+        ('bartender', 'Bartender'),
+        ('chef', 'Chef'),
+        ('driver', 'Driver'),
+        ('truck_driver', 'Truck driver'),
+        ('cashier', 'Cashier'),
+        ('delivery', 'Delivery'),
+        ('warehouse_worker', 'Warehouse worker'),
+        ('janitor', 'Janitor'),
+    ]
+    SALARY_TYPE = [
+        ('monthly', 'Monthly'),
+        ('daily', 'Daily'),
+        ('hourly', 'Hourly'),
+    ]
+    uuid = models.UUIDField(primary_key=True, default=generate_uuid, editable=False)
+    title = models.CharField(max_length=100, null=False)
+    description = models.TextField(null=False)
+    salary = models.DecimalField(max_digits=10, decimal_places=2, validators=[val_sal], db_index=True, null=False)
+    type_of_salary = models.CharField(max_length=14, choices=SALARY_TYPE, default="monthly", null=False)
+    work_time = models.CharField(max_length=20, null=False)
+    position_type = models.CharField(max_length=30, choices=POSITION_TYPE, null=False, db_index=True)
+    address = models.CharField(max_length=100, null=False)
+    contact_email = models.EmailField(
+        blank=True,
+        default=""
+    )
+    contact_phone = models.CharField(
+        max_length=15,
+        blank=True,
+        default="",
+        validators=[
+            RegexValidator(
+                regex=r'^\+?1?\d{9,15}$',
+                message="Phone number must be entered in the international format."
+            )
+        ]
+    )
+    image = models.ImageField(
+        upload_to='ads/',
+        blank=True,
+        validators=[val_pic_size],
+        null=True
+    )
+    posted_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="advertisements"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def save(self, *args, **kwargs):
+        # 16:9 banner output for card/header usage.
+        normalize_uploaded_image(self.image, (1280, 720))
+        super().save(*args, **kwargs)
+
+    def _str_(self):
+        return self.title
