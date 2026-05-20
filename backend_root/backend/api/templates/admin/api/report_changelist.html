@@ -1,0 +1,51 @@
+{% extends "admin/change_list.html" %}
+
+{% block content %}
+  {% if status_counts %}
+    <div class="report-summary">
+      <style>
+        .report-summary {
+          margin: 0 0 16px;
+        }
+        .report-summary-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          gap: 10px;
+        }
+        .report-summary-card {
+          border: 1px solid #d9dce1;
+          border-radius: 8px;
+          padding: 10px 12px;
+          background: #fff;
+        }
+        .report-summary-card strong {
+          display: block;
+          font-size: 1.4rem;
+          margin-top: 4px;
+          color: #1f2937;
+        }
+        .report-summary-card span {
+          color: #4b5563;
+          font-size: 0.85rem;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+      </style>
+
+      <div class="report-summary-grid">
+        <div class="report-summary-card">
+          <span>Total</span>
+          <strong>{{ total_reports }}</strong>
+        </div>
+        {% for item in status_counts %}
+          <div class="report-summary-card">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.count }}</strong>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  {{ block.super }}
+{% endblock %}
